@@ -1,4 +1,5 @@
 #include "player.h"
+#include "enemy.h"
 #include "int_types.h"
 #include "input.h"
 #include "int_types.h"
@@ -9,6 +10,8 @@
 
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
+#include <errno.h>
 #include <time.h>
 #include <assert.h>
 #include <limits.h>
@@ -16,6 +19,8 @@
 
 s32 main(void)
 {
+    srand(time(NULL));
+
     bool success = true;
 
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
@@ -49,6 +54,13 @@ s32 main(void)
     usize tick = 0;
 
     struct key_state key_states[SDL_NUM_SCANCODES] = KEY_STATES_DEFAULT;
+
+    struct enemies* enemies = malloc(sizeof(*enemies));
+    if (enemies == NULL) {
+        fprintf(stderr, "Failed to allocate memory: %s\n", strerror(errno));
+        goto cleanup_renderer;
+    }
+    enemies_init(enemies);
 
     struct player player;
     player_init(&player);
@@ -97,24 +109,34 @@ s32 main(void)
 
         player_update(&player, frame_begin_time, tick, key_states);
 
+        f64 physics_elapsed_total = 0.0f;
+        const usize physics_steps = (usize) (physics_accumulator / DELTA_TIME);
         while (physics_accumulator >= DELTA_TIME) {
+            const f64 begin = get_time();
             player_physics(&player, box_pos, box_scale, frame_begin_time);
+            enemies_physics(enemies, box_pos, box_scale);
 
             camera = player.pos;
 
             physics_accumulator -= DELTA_TIME;
+            physics_elapsed_total += get_time() - begin;
+        }
+        if (physics_elapsed_total > ((f64) physics_steps) * DELTA_TIME) {
+            SDL_Log("Sorry, your computer is too shit to run this simulation. (or I fucked up)\n");
+            success = false;
+            goto cleanup_enemies;
         }
 
         if (SDL_SetRenderDrawColor(renderer, 255, 255, 255, 0) != 0) {
             fprintf(stderr, "%s\n", SDL_GetError());
             success = false;
-            goto cleanup_renderer;
+            goto cleanup_enemies;
         }
 
         if (SDL_RenderClear(renderer) != 0) {
             fprintf(stderr, "%s\n", SDL_GetError());
             success = false;
-            goto cleanup_renderer;
+            goto cleanup_enemies;
         }
 
         if (!draw_sprite( renderer
@@ -122,12 +144,19 @@ s32 main(void)
                                           , .color = (SDL_Color) { 128, 128, 128, 0 }}
                         , vec2_sub(box_pos, camera))) {
             success = false;
-            goto cleanup_renderer;
+            goto cleanup_enemies;
         }
 
         if (!draw_sprite(renderer, player.sprite, vec2_sub(player.pos, camera))) {
             success = false;
-            goto cleanup_renderer;
+            goto cleanup_enemies;
+        }
+
+        for (usize i = 0; i < enemies->len; ++i) {
+            if (!draw_sprite(renderer, enemies->sprite, vec2_sub(enemies->pos[i], camera))) {
+                success = false;
+                goto cleanup_enemies;
+            }
         }
 
         SDL_RenderPresent(renderer);
@@ -136,7 +165,11 @@ s32 main(void)
         frame_elapsed_time = frame_end_time - frame_begin_time;
         frame_begin_time = frame_end_time;
         physics_accumulator += frame_elapsed_time;
+        fprintf(stderr, "%f\n", frame_elapsed_time);
     }
+
+cleanup_enemies:
+    free(enemies);
 
 cleanup_renderer:
     SDL_DestroyRenderer(renderer);
@@ -148,7 +181,6 @@ cleanup_sdl:
     SDL_Quit();
 
 cleanup:
-
     if (success) {
         fprintf(stderr, "My application has closed successfully.\n");
         return EXIT_SUCCESS;

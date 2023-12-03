@@ -11,6 +11,6 @@ struct sprite
     SDL_Color color;
 };
 
-bool draw_sprite(SDL_Renderer* renderer, struct sprite sprite, vec2s pos);
+bool draw_sprite(SDL_Renderer* renderer, const struct sprite sprite, const vec2s pos);
 
 #endif // SPRITE_H_

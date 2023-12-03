@@ -29,7 +29,8 @@ $(TARGET): build deps $(OBJECTS)
 
 -include $(DEPENDS)
 
-build/%.o: src/%.c | $(DEPS)
+build/*.o: $(DEPS) Makefile
+build/%.o: src/%.c
 	$(CC) -MMD -MP -MF $(<:src/%.c=deps/%.d) -MT $@ -c $(CFLAGS) -o $@ $<
 
 clean: build deps

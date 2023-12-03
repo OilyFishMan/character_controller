@@ -14,6 +14,7 @@ struct player
         bool jump_pressed : 1;
         bool jumping : 1;
     };
+
     f64 coyote_time;
 
     vec2s vel;
